@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { CheckCircle2, ChevronDown, Circle, ClipboardCheck, Filter, Plus, Trash2, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, ClipboardCheck, Filter, LogOut, Plus, Trash2, X } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,9 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CheckItem {
   id: string;
@@ -21,7 +23,6 @@ interface CheckItem {
 }
 
 type FilterType = "전체" | "완료" | "미완료";
-
 const CATEGORIES = ["월간 점검", "분기 점검"];
 
 const fetchItems = async (): Promise<CheckItem[]> => {
@@ -34,12 +35,16 @@ const fetchItems = async (): Promise<CheckItem[]> => {
 };
 
 const Index = () => {
+  const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterType>("전체");
   const [memoTimers, setMemoTimers] = useState<Record<string, NodeJS.Timeout>>({});
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
+
+  const userName = user?.user_metadata?.full_name || user?.email || "사용자";
+  const userAvatar = user?.user_metadata?.avatar_url;
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["checklist_items"],
@@ -66,7 +71,9 @@ const Index = () => {
 
   const addMutation = useMutation({
     mutationFn: async ({ title, category }: { title: string; category: string }) => {
-      const { error } = await supabase.from("checklist_items").insert({ title, category });
+      const { error } = await supabase
+        .from("checklist_items")
+        .insert({ title, category, user_id: user!.id });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -148,23 +155,40 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 border-b border-border bg-card/80 backdrop-blur-md">
         <div className="mx-auto max-w-2xl px-4 py-5">
+          {/* User bar */}
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
               <ClipboardCheck className="h-5 w-5 text-primary" />
             </div>
             <h1 className="text-xl font-bold text-foreground">OK금융 업무 점검</h1>
+            <div className="ml-auto flex items-center gap-2">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={userAvatar} alt={userName} />
+                <AvatarFallback className="bg-primary/15 text-primary text-xs">
+                  {userName.charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-sm text-muted-foreground hidden sm:inline max-w-[120px] truncate">
+                {userName}
+              </span>
+              <Button variant="ghost" size="icon" onClick={signOut} title="로그아웃" className="text-muted-foreground hover:text-destructive">
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Add button */}
+          <div className="flex items-center mb-4">
             <Button
               size="sm"
               onClick={() => setShowAddForm(!showAddForm)}
-              className="ml-auto"
               variant={showAddForm ? "secondary" : "default"}
             >
-              {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              <span className="ml-1 hidden sm:inline">{showAddForm ? "취소" : "항목 추가"}</span>
+              {showAddForm ? <X className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              {showAddForm ? "취소" : "항목 추가"}
             </Button>
           </div>
 
-          {/* Add form */}
           {showAddForm && (
             <div className="mb-4 rounded-xl border border-border bg-muted/30 p-4 space-y-3">
               <Input
