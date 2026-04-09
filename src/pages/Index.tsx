@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CheckCircle2, Circle, ClipboardCheck, Filter } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, ClipboardCheck, Filter } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
