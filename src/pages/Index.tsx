@@ -147,7 +147,8 @@ const Index = () => {
                   </div>
                 ))}
             </div>
-          </section>
+            </CollapsibleContent>
+          </Collapsible>
         ))}
 
         {filtered.length === 0 && (
