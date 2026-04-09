@@ -1,12 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
-import { CheckCircle2, ChevronDown, Circle, ClipboardCheck, Filter } from "lucide-react";
+import { useState, useCallback } from "react";
+import { CheckCircle2, ChevronDown, Circle, ClipboardCheck, Filter, Plus, Trash2, X } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 interface CheckItem {
   id: string;
@@ -17,6 +21,8 @@ interface CheckItem {
 }
 
 type FilterType = "전체" | "완료" | "미완료";
+
+const CATEGORIES = ["월간 점검", "분기 점검"];
 
 const fetchItems = async (): Promise<CheckItem[]> => {
   const { data, error } = await supabase
@@ -31,6 +37,9 @@ const Index = () => {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterType>("전체");
   const [memoTimers, setMemoTimers] = useState<Record<string, NodeJS.Timeout>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["checklist_items"],
@@ -39,10 +48,7 @@ const Index = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<CheckItem> }) => {
-      const { error } = await supabase
-        .from("checklist_items")
-        .update(updates)
-        .eq("id", id);
+      const { error } = await supabase.from("checklist_items").update(updates).eq("id", id);
       if (error) throw error;
     },
     onMutate: async ({ id, updates }) => {
@@ -58,17 +64,49 @@ const Index = () => {
     },
   });
 
+  const addMutation = useMutation({
+    mutationFn: async ({ title, category }: { title: string; category: string }) => {
+      const { error } = await supabase.from("checklist_items").insert({ title, category });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checklist_items"] });
+      setNewTitle("");
+      setShowAddForm(false);
+      toast.success("항목이 추가되었습니다");
+    },
+    onError: () => toast.error("추가에 실패했습니다"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("checklist_items").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["checklist_items"] });
+      const prev = queryClient.getQueryData<CheckItem[]>(["checklist_items"]);
+      queryClient.setQueryData<CheckItem[]>(["checklist_items"], (old) =>
+        old?.filter((item) => item.id !== id) ?? []
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev) queryClient.setQueryData(["checklist_items"], context.prev);
+      toast.error("삭제에 실패했습니다");
+    },
+    onSuccess: () => toast.success("항목이 삭제되었습니다"),
+  });
+
   const toggleCheck = (id: string, currentChecked: boolean) => {
     updateMutation.mutate({ id, updates: { checked: !currentChecked } });
   };
 
   const handleMemoChange = useCallback(
     (id: string, memo: string) => {
-      // Optimistic update locally
       queryClient.setQueryData<CheckItem[]>(["checklist_items"], (old) =>
         old?.map((item) => (item.id === id ? { ...item, memo } : item)) ?? []
       );
-      // Debounce DB save
       setMemoTimers((prev) => {
         if (prev[id]) clearTimeout(prev[id]);
         const timer = setTimeout(() => {
@@ -79,6 +117,11 @@ const Index = () => {
     },
     [queryClient, updateMutation]
   );
+
+  const handleAdd = () => {
+    if (!newTitle.trim()) return;
+    addMutation.mutate({ title: newTitle.trim(), category: newCategory });
+  };
 
   const completedCount = items.filter((i) => i.checked).length;
   const totalCount = items.length;
@@ -110,7 +153,45 @@ const Index = () => {
               <ClipboardCheck className="h-5 w-5 text-primary" />
             </div>
             <h1 className="text-xl font-bold text-foreground">OK금융 업무 점검</h1>
+            <Button
+              size="sm"
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="ml-auto"
+              variant={showAddForm ? "secondary" : "default"}
+            >
+              {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              <span className="ml-1 hidden sm:inline">{showAddForm ? "취소" : "항목 추가"}</span>
+            </Button>
           </div>
+
+          {/* Add form */}
+          {showAddForm && (
+            <div className="mb-4 rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+              <Input
+                placeholder="점검 항목명을 입력하세요"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                className="bg-card border-border"
+              />
+              <div className="flex gap-2">
+                <Select value={newCategory} onValueChange={setNewCategory}>
+                  <SelectTrigger className="bg-card border-border flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleAdd} disabled={!newTitle.trim() || addMutation.isPending}>
+                  저장
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-muted-foreground">진행률</span>
@@ -180,6 +261,13 @@ const Index = () => {
                                 완료
                               </Badge>
                             )}
+                            <button
+                              onClick={() => deleteMutation.mutate(item.id)}
+                              className="ml-auto p-1 rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              title="삭제"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
                           <Textarea
                             placeholder="메모를 입력하세요..."
