@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CheckCircle2, Circle, ClipboardCheck, Filter } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, ClipboardCheck, Filter } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -94,11 +95,16 @@ const Index = () => {
       {/* Content */}
       <main className="mx-auto max-w-2xl px-4 py-6 space-y-8">
         {categories.map((cat) => (
-          <section key={cat}>
-            <div className="flex items-center gap-2 mb-3">
+          <Collapsible key={cat} defaultOpen>
+            <CollapsibleTrigger className="flex items-center gap-2 mb-3 w-full group cursor-pointer">
               <Filter className="h-4 w-4 text-muted-foreground" />
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{cat}</h2>
-            </div>
+              <span className="text-xs text-muted-foreground ml-1">
+                ({filtered.filter((i) => i.category === cat && i.checked).length}/{filtered.filter((i) => i.category === cat).length})
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto transition-transform group-data-[state=closed]:-rotate-90" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
             <div className="space-y-3">
               {filtered
                 .filter((i) => i.category === cat)
@@ -141,7 +147,8 @@ const Index = () => {
                   </div>
                 ))}
             </div>
-          </section>
+            </CollapsibleContent>
+          </Collapsible>
         ))}
 
         {filtered.length === 0 && (
